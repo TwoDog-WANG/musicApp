@@ -6,9 +6,10 @@ function createWindow () {
       width: 800,
       height: 600,
       webPreferences: {
-        preload: path.join(__dirname, './preload/preload.js')
-      }
+        preload: path.join(__dirname, './preload/preload.js'),
+      },
     })
+    // win.loadFile('./src/vue_dist/main.html')
     win.loadURL('http://localhost:8080/main.html');
     win.webContents.openDevTools();
 }

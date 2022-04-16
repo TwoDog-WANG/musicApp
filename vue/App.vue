@@ -1,28 +1,19 @@
 <template>
-    <MyAudioComponent
-        :audioSrc="audioSrc"
-    ></MyAudioComponent>
+    <MyAudioComponent></MyAudioComponent>
 </template>
 
 <script>
 import MyAudioComponent from './component/myAudioComponent/MyAudioComponent.vue';
-import src from '../electron/111.mp3';
+import src from 'C:/Users/王二狗/Desktop/web/konomusic/src/electron/111.mp3'
 export default {
     components: {
         MyAudioComponent,
     },
     data() {
         return {
-            audioSrc: src
         }
     },
-    created () {
-        // window.getAudio().then(res => {
-        //     if(this.audioSrc) {
-        //         URL.revokeObjectURL(this.audioSrc);
-        //     }
-        //     this.audioSrc = res;
-        // });
+    methods: {
     },
 }
 </script>
@@ -31,4 +22,10 @@ export default {
     #app {
         margin-top: 200px;
     }
+    /* body {
+        -webkit-app-region: drag;
+    }
+    .click {
+        -webkit-app-region: no-drag;
+    } */
 </style>

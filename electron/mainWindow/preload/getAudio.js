@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-const basicPath = path.resolve(__dirname, '../../111.mp3');
+const basicPath = path.join('F:/music/');
 
-async function getAudio(path = basicPath) {
+async function getAudio(endPath = '3nd - Nemure.mp3') {
+    let path = basicPath + endPath;
     const audioBuffer = await fs.promises.readFile(path);
     //将buffer变为无符号的8位数组，arraybuffer
     const audioArrayBuffer = Uint8Array.from(audioBuffer);
@@ -11,4 +12,4 @@ async function getAudio(path = basicPath) {
     return URL.createObjectURL(new Blob([audioArrayBuffer]));
 }
 
-module.exports = getAudio;
+module.exports = {getAudio};
