@@ -9,12 +9,14 @@ const stores = {
                 //确保index相同的时候，watch能够监听到对应的数值
                 playIndex: {num: NaN},
                 isSortList: false,
+                isFistLoad: true,
             },
             audioList: [],
             audioRandomList: [],
             playList: [],
+            noList: true,
             userConfig: {
-                localMusicDir: '',
+                localMusicDir: {dir: ''},
             },
             userPlayState: {
                 musicName: '',
@@ -50,6 +52,9 @@ const stores = {
                 }
             })
             state.playList = list;
+        },
+        setNoList(state, value) {
+            state.noList = value;
         },
         sortPlayList(state, sortObj) {
             if(sortObj.dir === 0) {
@@ -179,14 +184,17 @@ const stores = {
         setAudioIsPaused(state, value) {
             state.audioControlState.audioIsPaused = value;
         },
+        setIsFistLoad(state, value) {
+            state.audioControlState.isFistLoad = value;
+        },
         changePlayIndex(state, value) {
             state.audioControlState.playIndex = {num: value};
         },
         changeIsSortList(state, value) {
             state.audioControlState.isSortList = value;
         },
-        setLocalMusicDir(state, dir) {
-            state.userConfig.localMusicDir = dir
+        setLocalMusicDir(state, value) {
+            state.userConfig.localMusicDir = {dir: value}
         }
     }
 }

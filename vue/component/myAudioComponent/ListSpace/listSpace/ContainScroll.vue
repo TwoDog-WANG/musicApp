@@ -95,7 +95,7 @@ export default {
                         if(this.list.length > this.basicStyle.height / spanHeight && newValue.num >= 5 && newValue.num < this.list.length - this.basicStyle.height / spanHeight) {
                             this.listMoveNum = newValue.num - 5;
                         }
-                        else if(this.list.length > this.basicStyle.height / spanHeight && newValue.num > this.list.length - this.basicStyle.height / spanHeight) {
+                        else if(this.list.length > this.basicStyle.height / spanHeight && newValue.num >= this.list.length - this.basicStyle.height / spanHeight) {
                             this.listMoveNum = this.list.length - this.basicStyle.height / spanHeight;
                         }
                         else {
@@ -273,7 +273,7 @@ export default {
         .list-contain-space {
             width: 492px;
             position: absolute;
-            transition: all 0.15s linear;
+            
             .list-div {
                 width: 100%;
                 color: rgb(180, 180, 180);

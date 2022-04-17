@@ -80,267 +80,270 @@
     </div>
 </template>
 
-<script>
-import ProgressBar from './ProgressBar.vue'
+<script setup>
+    import { computed, onMounted, reactive, ref, watch } from 'vue';
+    import { useStore } from 'vuex';
 
-export default {
-    components: {
-        ProgressBar,
-    },
-    data() {
-        return {
-            audioSrc: '',
-            //歌曲持续时间
-            durationTime: '00:00',
-            //每秒改变一次，用于确定歌曲现在的时间
-            nowPlaySecond: 0,
-            //用于接收setInterval
-            nowPlayTimeInterval: null,
-            playButtonISShow: true,
-            //用于确定进度条百分比
-            nowPrecent: 0,
-            //用于在拖动进度条的时候，不会改变nowPrecent
-            canSetPrecent: true,
-            //音量条是否出现
-            volumeBarIsShow: false,
-            //音量数字
-            // volumeNumber: 12,
-            // 播放模式
-            playMode: 2,
-            playModeStateObj: {
-                styleArr: [true, false, false],
-                title: ['随机', '单曲', '循环']
-            },
-            randomIndex: {
-                index: [],
-                pointer: 0,
-            },
+    import ProgressBar from './ProgressBar.vue';
+
+    const store = useStore();
+
+    const myAudio = ref(null);
+    onMounted(() => {
+        // 挂载的时候改变音量，抓取audio元素
+        myAudio.value.volume = 0.5;
+        store.commit('setMyAudioEle', myAudio.value);
+    })
+
+    // 音量条是否出现
+    let volumeBarIsShow = ref(false);
+    // 音量条改变触发
+    function changeVolume(value) {
+        myAudio.value.volume = parseInt(value) / 100;
+    }
+    function changeVolumeShow() {
+        volumeBarIsShow.value = !volumeBarIsShow.value;
+    }
+
+    // 记录播放时间
+    let nowPlaySecond = ref(0);
+    // 显示展示时间
+    const nowTime = computed(() => {
+        let audioSecond = parseInt(nowPlaySecond.value % 60).toString().length < 2 ? `0${parseInt(nowPlaySecond.value % 60)}` : parseInt(nowPlaySecond.value % 60);
+        let audioMinute = parseInt(nowPlaySecond.value / 60).toString().length < 2 ? `0${parseInt(nowPlaySecond.value / 60)}` : parseInt(nowPlaySecond.value / 60);
+        return `${audioMinute}:${audioSecond}`
+    })
+    // 总时长
+    const durationTime = ref('');
+    // audio的canplay事件触发
+    function getAudioDurationTime(e) {
+        const audioSecond = parseInt(myAudio.value.duration % 60).toString().length < 2 ? `0${parseInt(myAudio.value.duration % 60)}` : parseInt(myAudio.value.duration % 60);
+        const audioMinute = parseInt(myAudio.value.duration / 60).toString().length < 2 ? `0${parseInt(myAudio.value.duration / 60)}` : parseInt(myAudio.value.duration / 60);
+        durationTime.value = audioMinute + ':' + audioSecond;
+    }
+
+    // 控制播放按钮显示
+    let playButtonISShow = ref(true);
+    // 用于控制播放时间，1s一跳
+    let nowPlayTimeInterval = null;
+    // 点击播放按钮后，如果暂停，播放，开始计时，如果播放，暂停，停止计时
+    function toPlay() {
+        if(myAudio.value.paused) {
+            myAudio.value.play();
+            playButtonISShow.value = false;
+            nowPlayTimeInterval = setInterval(() => {
+                nowPlaySecond.value++
+            }, 1000)
         }
-    },
-    mounted () {
-        // this.$watch(
-        //     () => this.$store.state.playList, 
-        //     (newValue) => {
-        //         let isSortList = this.$store.state.audioControlState.isSortList;
-        //         if(!isSortList) {
-        //             this.setAudioSrc(newValue, this.audioIsPaused);
-        //         }
-        //     },
-        // )
+        else {
+            myAudio.value.pause();
+            playButtonISShow.value = true;
+            clearInterval(nowPlayTimeInterval);
+        }
+    }
+    function audioEnd(e) {
+        e.preventDefault();
+    }
 
-        this.$refs.myAudio.volume = 0.5;
-        this.$store.commit('setMyAudioEle', this.$refs.myAudio);
-    },
-    computed: {
-        nowTime() {
-            const audioSecond = parseInt(this.nowPlaySecond % 60).toString().length < 2 ? `0${parseInt(this.nowPlaySecond % 60)}` : parseInt(this.nowPlaySecond % 60);
-            const audioMinute = parseInt(this.nowPlaySecond / 60).toString().length < 2 ? `0${parseInt(this.nowPlaySecond / 60)}` : parseInt(this.nowPlaySecond / 60);
-            return `${audioMinute}:${audioSecond}`
+
+    // 用于防止currentTime事件与进度条事件共同改变进度条
+    let canSetPrecent = true;
+    // 进度条开始拖动后触发，此时currentTime事件无法改变进度条
+    function stopSetPrecent(e) {
+        canSetPrecent = false;
+    }
+    // 给与进度条百分比进度
+    let nowPrecent = ref(0);
+    // currentTime事件触发
+    function timeUpDate(e) {
+        // 播放到结尾后，手动下一首
+        if(e.target.currentTime === e.target.duration) {
+            changePlayIndex(null, true);
+            return
+        }
+        // 是否可以设置进度条百分比
+        if(canSetPrecent) {
+            // 给出进度条的百分比
+            nowPrecent.value = e.target.currentTime / e.target.duration * 100;
+        }
+    }
+    // 进度条组件的拖动、拖动后释放、点击触发该事件，value是组件进度的百分比，inDrag是是否在拖动状态
+    function changeCurrentTime(value, inDrag) {
+        // 点击及拖动后释放，且到达最后时，下一首
+        if(!inDrag && value === 100) {
+            // 改变playIndex的值
+            changePlayIndex();
+            canSetPrecent = true;
+        }
+        // 没有到最后
+        else if(!inDrag) {
+            canSetPrecent = true;
+            // 设置audio的currentTime及显示时间，不过currentTime是小数，nowPlaySecond是整数，有误差，最大值为1s
+            myAudio.value.currentTime = myAudio.value.duration * value / 100;
+            nowPlaySecond.value = parseInt(myAudio.value.duration * value / 100);
+        }
+        else {
+            // 拖动转态下改变显示的时间
+            nowPlaySecond.value = parseInt(myAudio.value.duration * value / 100);
+        }
+    }
+
+    // 用于标识播放模式，顺序、单曲、随机
+    const playMode = ref(2);
+    // 标识模式按钮展示的样式
+    const playModeStateObj = reactive({
+            styleArr: [true, false, false],
+            title: ['随机', '单曲', '循环']
+    })
+    watch(playMode, (newValue, oldValue) => {
+        if(oldValue) {
+            playModeStateObj.styleArr[newValue] = true;
+            playModeStateObj.styleArr[oldValue] = false;
+        }
+        else {
+            playModeStateObj.styleArr.map((value, index, arr) => {
+                arr[index] = false;
+            })
+            playModeStateObj.styleArr[newValue] = true;
+        }
         },
-        audioIsPaused() {
-            return this.$store.state.audioControlState.audioIsPaused
+        {immediate: true}
+    )
+    // 播放模式按钮点击触发
+    function changePlayMode() {
+        if(playMode.value < playModeStateObj.styleArr.length - 1) {
+            playMode.value++;
         }
-    },
-    watch: {
-        playMode: {
-            handler(newValue, oldValue) {
-                if(oldValue) {
-                    this.playModeStateObj.styleArr[newValue] = true;
-                    this.playModeStateObj.styleArr[oldValue] = false;
+        else{
+            playMode.value = 0;
+        }
+    }
+
+    let audioSrc = '';
+    // 用于触发监听，平时直接从store内取值即可
+    const playIndex = computed(() => {
+        return store.state.audioControlState.playIndex
+    })
+    // 父组件在create时会异步的改变playIndex的值，触发该事件
+    watch(playIndex, () => {
+        let isSortList = store.state.audioControlState.isSortList;
+        // list组件的重新排序会改变playIndex的值，非重排才改变播放状态
+        if(!isSortList) {
+            // 改变audioSrc
+            setAudioSrc();
+        }
+        else {
+            store.commit('changeIsSortList', false);
+        }
+    })
+    // 点击上一首和下一首按钮会传入e，播放到最后会传入isAudioEnd = true，进度条拉到最后无传入
+    function changePlayIndex(e, isAudioEnd = false) {
+        if(isAudioEnd) {
+            //播放到结束位置时，paused为真，所以需要手动置假
+            store.commit('setAudioIsPaused', false);
+        }
+        else {
+            //暂停为真，播放为假
+            store.commit('setAudioIsPaused', myAudio.value.paused);
+        }
+        // 单曲
+        if(playMode.value === 1) {
+            // 直接用src给src赋值，重置状态
+            myAudio.value.setAttribute('src', audioSrc);
+            resetAudioPlayState();
+        }
+        // 循环
+        else if(playMode.value === 2) {
+            const audioList = store.state.playList;
+            let playIndex = store.state.audioControlState.playIndex.num;
+            let nowPlayIndex;
+            // 对应上一首按钮
+            if(e && e.currentTarget.className.split(' ')[0] === 'previous-music-space') {
+                nowPlayIndex = playIndex > 0 ? playIndex - 1 : audioList.length - 1;
+            }
+            // 对应下一首、播放到最后、拖到最后
+            else {
+                nowPlayIndex = playIndex < audioList.length - 1 ? playIndex + 1 : 0;
+            }
+            // 触发监听，从而改变src及重置播放状态
+            store.commit('changePlayIndex', nowPlayIndex);
+        }
+        // 随机
+        // 另一套方案是通过生成一个无重复的随机播放列表，取代原播放列表
+        else if(playMode.value === 0) {
+            let index = createRandomIndex(e);
+            store.commit('changePlayIndex', index);
+        }
+    }
+    const createRandomIndex = function createRandomIndexBox() {
+        let randomIndex = {
+            indexArr: [],
+            pointer: 0,
+        }
+        return (e) => {
+            const audioListLength = store.state.playList.length;
+            if(e && e.currentTarget.className.split(' ')[0] === 'previous-music-space') {
+                // 上一首，如果此时指到indexArr的第一个，则随机生成一个index插入到indexArr的最前面
+                if(randomIndex.pointer === 0) {
+                    randomIndex.indexArr.unshift( parseInt(Math.random() * audioListLength) );
+                }
+                // 否则指向当前pointer的上一个index
+                else {
+                    randomIndex.pointer--;
+                }
+            }
+            else {
+                if(randomIndex.pointer >= randomIndex.indexArr.length - 1) {
+                    randomIndex.indexArr.push( parseInt(Math.random() * audioListLength) );
+                    randomIndex.pointer = randomIndex.indexArr.length - 1;
                 }
                 else {
-                    this.playModeStateObj.styleArr.map((value, index, arr) => {
-                        arr[index] = false;
-                    })
-                    this.playModeStateObj.styleArr[newValue] = true;
-                }
-            },
-            immediate: true
-        },
-        '$store.state.audioControlState.playIndex': {
-            handler() {
-                let isSortList = this.$store.state.audioControlState.isSortList;
-                let list = this.$store.state.playList;
-                
-                if(!isSortList) {
-                    this.setAudioSrc(list, this.audioIsPaused);
-                }
-                else {
-                    this.$store.commit('changeIsSortList', false);
+                    randomIndex.pointer++;
                 }
             }
+            return randomIndex.indexArr[randomIndex.pointer]
         }
-    },
-    methods: {
-        toPlay() {
-            const audio = this.$refs.myAudio;
-            if(audio.paused) {
-                audio.play();
-                this.playButtonISShow = false;
-                this.nowPlayTimeInterval = setInterval(() => {
-                    this.nowPlaySecond++
-                }, 1000)
-            }
-            else {
-                audio.pause();
-                this.playButtonISShow = true;
-                clearInterval(this.nowPlayTimeInterval);
-            }
-            
-        },
-        changeCurrentTime(value, inDrag) {
-            const audio = this.$refs.myAudio;
-            if(!inDrag && value === 100) {
-                this.changePlayIndex();
-                this.canSetPrecent = true;
-            }
-            else if(!inDrag) {
-                this.canSetPrecent = true;
-                audio.currentTime = audio.duration * value / 100;
-                this.nowPlaySecond = parseInt(audio.duration * value / 100);
-            }
-            else {
-                this.nowPlaySecond = parseInt(audio.duration * value / 100);
-            }
-            
-        },
-        stopSetPrecent(e) {
-            this.canSetPrecent = false;
-        },
-        getAudioDurationTime(e) {
-            const audio = this.$refs.myAudio;
-            const audioSecond = parseInt(audio.duration % 60).toString().length < 2 ? `0${parseInt(audio.duration % 60)}` : parseInt(audio.duration % 60);
-            const audioMinute = parseInt(audio.duration / 60).toString().length < 2 ? `0${parseInt(audio.duration / 60)}` : parseInt(audio.duration / 60);
-            this.durationTime = audioMinute + ':' + audioSecond;
-        },
-        timeUpDate(e) {
-            if(e.target.currentTime === e.target.duration) {
-                this.changePlayIndex(e, true);
-                return
-            }
-            if(this.canSetPrecent) {
-                let nowPrecent = e.target.currentTime / e.target.duration * 100;
-                this.nowPrecent = nowPrecent;
-            }
-
-        },
-        audioEnd(e) {
-            e.preventDefault();
-        },
-        changeVolume(value) {
-            const audio = this.$refs.myAudio;
-            audio.volume = parseInt(value) / 100;
-            
-        },
-        changeVolumeShow() {
-            this.volumeBarIsShow = !this.volumeBarIsShow;
-        },
-        changePlayMode() {
-            if(this.playMode < this.playModeStateObj.styleArr.length - 1) {
-                this.playMode++;
-            }
-            else{
-                this.playMode = 0;
-            }
-        },
-        changePlayIndex(e, isTimeEnd = false) {
-            const audio = this.$refs.myAudio;
-            if(isTimeEnd) {
-                //播放到结束位置时，paused为真，所以需要手动置假
-
-                this.$store.commit('setAudioIsPaused', false);
-            }
-            else {
-                //暂停为真，播放为假
-                this.$store.commit('setAudioIsPaused', audio.paused);
-            }
-            if(this.playMode === 1) {
-                audio.setAttribute('src', this.audioSrc);
-                this.resetAudioPlayState(this.audioIsPaused);
-            }
-            else if(this.playMode === 2) {
-                const audioList = this.$store.state.playList;
-                let playIndex = this.$store.state.audioControlState.playIndex.num;
-                let nowPlayIndex;
-                if(e && e.currentTarget.className.split(' ')[0] === 'previous-music-space') {
-                    nowPlayIndex = playIndex > 0 ? playIndex - 1 : audioList.length - 1;
+    }();
+    function setAudioSrc() {
+        let playIndex = store.state.audioControlState.playIndex.num;
+        let audioList = store.state.playList;
+        if(window.getAudio) {
+            window.getAudio(audioList[playIndex].musicName.join(""))
+            .then((res) => {
+                if(audioSrc) {
+                    URL.revokeObjectURL(audioSrc);
                 }
-                else {
-                    nowPlayIndex = playIndex < audioList.length - 1 ? playIndex + 1 : 0;
-                }
-                this.$store.commit('changePlayIndex', nowPlayIndex);
-            }
-            else if(this.playMode === 0) {
-                const audioListLength = this.$store.state.playList.length;
-                if(e && e.currentTarget.className.split(' ')[0] === 'previous-music-space') {
-                    if(this.randomIndex.pointer === 0) {
-                        this.randomIndex.index.unshift( parseInt(Math.random() * audioListLength) );
-                        this.$store.commit('changePlayIndex', this.randomIndex.index[0]);
-                    }
-                    else {
-                        this.randomIndex.pointer--;
-                        this.$store.commit('changePlayIndex', this.randomIndex.index[this.randomIndex.pointer]);
-                    }
-                }
-                else {
-                    if(this.randomIndex.index.length === 0) {
-                        this.randomIndex.index.push( parseInt(Math.random() * audioListLength) );
-                        this.$store.commit('changePlayIndex', this.randomIndex.index[0]);
-                    }
-                    else if(this.randomIndex.pointer === this.randomIndex.index.length - 1) {
-                        this.randomIndex.index.push( parseInt(Math.random() * audioListLength) );
-                        this.randomIndex.pointer++;
-                        this.$store.commit('changePlayIndex', this.randomIndex.index[this.randomIndex.pointer]);
-                    }
-                    else {
-                        this.randomIndex.pointer++;
-                        this.$store.commit('changePlayIndex', this.randomIndex.index[this.randomIndex.pointer]);
-                    }
-                }
-            }
-            
-        },
-        setAudioSrc(audioList, audioIsPaused) {
-            const audio = this.$refs.myAudio;
-            let playIndex = this.$store.state.audioControlState.playIndex.num;
-            if(window.getAudio) {
-                window.getAudio(audioList[playIndex].musicName.join(""))
-                .then((res) => {
-                    if(this.audioSrc) {
-                        URL.revokeObjectURL(this.audioSrc);
-                    }
-                    this.audioSrc = res;
-                    audio.setAttribute('src', res);
-                    this.resetAudioPlayState(audioIsPaused);
-                })
-                .catch((err) => {
-                    
-                })
-            }
-            else {
-                //axios get src
-            }
-        },
-        resetAudioPlayState(audioIsPaused) {
-            const audio = this.$refs.myAudio;
-
-            this.nowPlaySecond = 0;
-            this.nowPrecent = 0;
-            clearInterval(this.nowPlayTimeInterval);
-            if(audioIsPaused) {
-                this.playButtonISShow = true;
-            }
-            else {
-                this.nowPlayTimeInterval = setInterval(() => {
-                    this.nowPlaySecond++
-                }, 1000);
-                this.playButtonISShow = false;
-                audio.play();
-            }
-
+                audioSrc = res;
+                myAudio.value.setAttribute('src', res);
+                resetAudioPlayState();
+            })
+            .catch((err) => {
+                console.log(err);
+            })
         }
-    },
-}
+        else {
+            //axios get src
+        }
+    }
+    // 重置播放状态
+    function resetAudioPlayState() {
+        // 获得重置前的播放状态
+        const audioIsPaused = store.state.audioControlState.audioIsPaused;
+        nowPlaySecond.value = 0;
+        nowPrecent.value = 0;
+        clearInterval(nowPlayTimeInterval);
+        if(audioIsPaused) {
+            playButtonISShow.value = true;
+        }
+        else {
+            nowPlayTimeInterval = setInterval(() => {
+                nowPlaySecond.value++
+            }, 1000);
+            playButtonISShow.value = false;
+            myAudio.value.play();
+        }
+    }
+
 </script>
 
 <style lang="less">

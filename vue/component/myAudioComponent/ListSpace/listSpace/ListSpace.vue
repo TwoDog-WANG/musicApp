@@ -98,40 +98,7 @@ export default {
             isChangeMusicDir: false
         }
     },
-    created () {
-    },
     watch: {
-        '$store.state.userConfig.localMusicDir': {
-            handler(newDir) {
-                if(window.getAudioList) {
-                    window.getAudioList(newDir)
-                    .then((res) => {
-                        res.map((value, index, arr) => {
-                            //split接受的正则表达式如果有捕获括号，那么括号内的也会被填入到数组中
-                            //这里value是浅拷贝，可以直接value.musicName.split(/(.flac|.mp3|\s-\s)/)，不用赋值
-                            arr[index].musicName = value.musicName.split(/(.flac|.mp3)/)
-                        });
-                        //let copyList = deepCopy(res);
-                        let copyList2 = deepCopy(res);
-                        //let randomList = [];
-                        //不重复生成随机歌单，现在直接使用random生成播放列表的索引，会有重复的概率，播放列表的长度越小，重复概率越高
-                        // while (copyList.length > 0) {
-                        //     let random = parseInt(Math.random() * copyList.length);
-                        //     randomList.push(copyList.splice(random, 1))
-                        // }
-                        //this.$store.commit('setAudioRandomList', randomList);
-                        this.$store.commit('setAudioList', res);
-                        this.$store.commit('setPlayList', copyList2);
-                        //这里提交playIndex，以后会通过获取用户数据来提交
-                        this.$store.commit('changePlayIndex', 0);
-                    })
-                    .catch((err) => {
-                        console.log(err);
-                    })  
-                }
-
-            }
-        },
         '$store.state.playList': {
             handler(newValue, oldValue) {
                 this.audioList = newValue.map((value) => {
@@ -196,9 +163,13 @@ export default {
     methods: {
         toSetUserConfig() {
             window.setLocalMusicDir()
-            .then(res => {
+            .then(dir => {
+                if(dir === 0) {
+                    alert('可以通过左上角的设置按钮来设置本地文件夹');
+                    return
+                }
                 this.isChangeMusicDir = true;
-                this.$store.commit('setLocalMusicDir', res)
+                this.$store.commit('setLocalMusicDir', dir)
             })
         },
         toNowMusic() {
