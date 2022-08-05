@@ -7,8 +7,19 @@
         @ended="audioEnd"
     >
     </audio>
-    <div class="control-space">
+    <div class="control-space click">
         <div class="audio-button-space">
+            <div class="size-space" v-if="isMinsize">
+                <div class="more-btn" @click="showOrHiddenSizeBtn">
+                    <svg viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg"><path d="M513.4 463.2c-27.5 0-50 22.5-50 50s22.5 50 50 50 50-22.5 50-50-22.5-50-50-50z m-244 0c-27.5 0-50 22.5-50 50s22.5 50 50 50 50-22.5 50-50-22.5-50-50-50z m483.9 0c-27.5 0-50 22.5-50 50s22.5 50 50 50 50-22.5 50-50-22.5-50-50-50z" p-id="2034"></path>
+                    </svg>
+                </div>
+                <div class="size-btn">
+                    <transition name="hidden">
+                        <ChangeWindowSizeBtn v-show="showSizeBtn" @closeSizeBtn="closeSizeBtn"></ChangeWindowSizeBtn>
+                    </transition>
+                </div>
+            </div>
             <div 
                 class="play-mode-space little-button" 
                 :title="playModeStateObj.title[playMode]"
@@ -50,8 +61,7 @@
                 <div class="volume-bar-space" v-show="volumeBarIsShow">
                     <ProgressBar 
                         :buttonWidth="5"
-                        :progressDirection="'-Y'"
-                        :nowPrecent="50"
+                        :nowPrecent= "nowVolume"
                         @returnPrecent="changeVolume"
                     >
                     </ProgressBar>
@@ -61,7 +71,7 @@
                 
             </div>
         </div>
-        <div class="audio-progress-space">
+        <div class="audio-progress-space" v-if="!isMinsize">
             <div class="now-time my-audio-time">
                 {{nowTime}}
             </div>
@@ -77,229 +87,345 @@
                 {{durationTime}}
             </div>
         </div>
+        <div class="audio-name-space" v-show="isMinsize">
+            <span>{{audioName.slice(0, -5)}}</span>
+        </div>
     </div>
 </template>
 
-<script>
-import ProgressBar from './ProgressBar.vue'
+<script setup>
+    import { computed, onMounted, reactive, ref, watch, getCurrentInstance } from 'vue';
+    import { useStore } from 'vuex';
 
-export default {
-    components: {
-        ProgressBar,
-    },
-    data() {
-        return {
-            audioSrc: '',
-            //歌曲持续时间
-            durationTime: '00:00',
-            //每秒改变一次，用于确定歌曲现在的时间
-            nowPlaySecond: 0,
-            //用于接收setInterval
-            nowPlayTimeInterval: null,
-            playButtonISShow: true,
-            //用于确定进度条百分比
-            nowPrecent: 0,
-            //用于在拖动进度条的时候，不会改变nowPrecent
-            canSetPrecent: true,
-            //音量条是否出现
-            volumeBarIsShow: false,
-            //音量数字
-            // volumeNumber: 12,
-            // 播放模式
-            playMode: 2,
-            playModeStateObj: {
-                styleArr: [true, false, false],
-                title: ['随机', '单曲', '循环']
-            },
-            nowPlayIndex: 0,
+    import ProgressBar from './ProgressBar.vue';
+    import ChangeWindowSizeBtn from '../ChangeWindowSizeButton.vue';
+
+    const store = useStore();
+
+    const myAudio = ref(null);
+
+    onMounted(() => {
+        // 挂载的时候改变音量，抓取audio元素
+        myAudio.value.volume = 0.5;
+        store.commit('setMyAudioEle', myAudio.value);
+    })
+
+    // 音量条是否出现
+    let volumeBarIsShow = ref(true);
+    // 音量条改变触发
+    function changeVolume(value) {
+        myAudio.value.volume = parseInt(value) / 100;
+    }
+    function changeVolumeShow() {
+        // volumeBarIsShow.value = !volumeBarIsShow.value;
+    }
+
+    // 记录播放时间
+    let nowPlaySecond = ref(0);
+    // 显示展示时间
+    const nowTime = computed(() => {
+        let audioSecond = parseInt(nowPlaySecond.value % 60).toString().length < 2 ? `0${parseInt(nowPlaySecond.value % 60)}` : parseInt(nowPlaySecond.value % 60);
+        let audioMinute = parseInt(nowPlaySecond.value / 60).toString().length < 2 ? `0${parseInt(nowPlaySecond.value / 60)}` : parseInt(nowPlaySecond.value / 60);
+        return `${audioMinute}:${audioSecond}`
+    })
+    // 总时长
+    const durationTime = ref('');
+    // audio的canplay事件触发
+    function getAudioDurationTime(e) {
+        const audioSecond = parseInt(myAudio.value.duration % 60).toString().length < 2 ? `0${parseInt(myAudio.value.duration % 60)}` : parseInt(myAudio.value.duration % 60);
+        const audioMinute = parseInt(myAudio.value.duration / 60).toString().length < 2 ? `0${parseInt(myAudio.value.duration / 60)}` : parseInt(myAudio.value.duration / 60);
+        durationTime.value = audioMinute + ':' + audioSecond;
+    }
+
+    // 控制播放按钮显示
+    let playButtonISShow = ref(true);
+    // 用于控制播放时间，1s一跳
+    let nowPlayTimeInterval = null;
+    // 点击播放按钮后，如果暂停，播放，开始计时，如果播放，暂停，停止计时
+    function toPlay() {
+        if(myAudio.value.paused) {
+            myAudio.value.play();
+            playButtonISShow.value = false;
+            nowPlayTimeInterval = setInterval(() => {
+                nowPlaySecond.value++
+            }, 1000)
         }
-    },
-    mounted () {
-        this.$watch(
-            () => this.$store.state.playList, 
-            (newValue) => {
-                this.setAudioSrc(newValue, this.audioIsPaused);
-            },
-        )
+        else {
+            myAudio.value.pause();
+            playButtonISShow.value = true;
+            clearInterval(nowPlayTimeInterval);
+        }
+    }
+    function audioEnd(e) {
+        e.preventDefault();
+    }
 
-        this.$refs.myAudio.volume = 0.5;
-        this.$store.commit('setMyAudioEle', this.$refs.myAudio);
-    },
-    computed: {
-        nowTime() {
-            const audioSecond = parseInt(this.nowPlaySecond % 60).toString().length < 2 ? `0${parseInt(this.nowPlaySecond % 60)}` : parseInt(this.nowPlaySecond % 60);
-            const audioMinute = parseInt(this.nowPlaySecond / 60).toString().length < 2 ? `0${parseInt(this.nowPlaySecond / 60)}` : parseInt(this.nowPlaySecond / 60);
-            return `${audioMinute}:${audioSecond}`
+
+    // 用于防止currentTime事件与进度条事件共同改变进度条
+    let canSetPrecent = true;
+    // 进度条开始拖动后触发，此时currentTime事件无法改变进度条
+    function stopSetPrecent(e) {
+        canSetPrecent = false;
+    }
+    // 给与进度条百分比进度
+    let nowPrecent = ref(0);
+    // currentTime事件触发
+    function timeUpDate(e) {
+        // 播放到结尾后，手动下一首
+        if(e.target.currentTime === e.target.duration) {
+            changePlayIndex(null, true);
+            return
+        }
+        // 是否可以设置进度条百分比
+        if(canSetPrecent) {
+            // 给出进度条的百分比
+            nowPrecent.value = e.target.currentTime / e.target.duration * 100;
+        }
+    }
+    // 进度条组件的拖动、拖动后释放、点击触发该事件，value是组件进度的百分比，inDrag是是否在拖动状态
+    function changeCurrentTime(value, inDrag) {
+        // 点击及拖动后释放，且到达最后时，下一首
+        if(!inDrag && value === 100) {
+            // 改变playIndex的值
+            changePlayIndex();
+            canSetPrecent = true;
+        }
+        // 没有到最后
+        else if(!inDrag) {
+            canSetPrecent = true;
+            // 设置audio的currentTime及显示时间，不过currentTime是小数，nowPlaySecond是整数，有误差，最大值为1s
+            myAudio.value.currentTime = myAudio.value.duration * value / 100;
+            nowPlaySecond.value = parseInt(myAudio.value.duration * value / 100);
+        }
+        else {
+            // 拖动转态下改变显示的时间
+            nowPlaySecond.value = parseInt(myAudio.value.duration * value / 100);
+        }
+    }
+
+    // 用于标识播放模式，顺序、单曲、随机
+    const playMode = ref(0);
+    // 标识模式按钮展示的样式
+    const playModeStateObj = reactive({
+            styleArr: [true, false, false],
+            title: ['随机', '单曲', '循环']
+    })
+    watch(playMode, (newValue, oldValue) => {
+        if(oldValue) {
+            playModeStateObj.styleArr[newValue] = true;
+            playModeStateObj.styleArr[oldValue] = false;
+        }
+        else {
+            playModeStateObj.styleArr.map((value, index, arr) => {
+                arr[index] = false;
+            })
+            playModeStateObj.styleArr[newValue] = true;
+        }
         },
-        audioIsPaused() {
-            return this.$store.state.audioControlState.audioIsPaused
+        {immediate: true}
+    )
+    // 播放模式按钮点击触发
+    function changePlayMode() {
+        if(playMode.value < playModeStateObj.styleArr.length - 1) {
+            playMode.value++;
         }
-    },
-    watch: {
-        playMode: {
-            handler(newValue, oldValue) {
-                if(oldValue) {
-                    this.playModeStateObj.styleArr[newValue] = true;
-                    this.playModeStateObj.styleArr[oldValue] = false;
+        else{
+            playMode.value = 0;
+        }
+    }
+
+    let audioSrc = '';
+    // 用于触发监听，平时直接从store内取值即可
+    const playIndex = computed(() => {
+        return store.state.audioControlState.playIndex
+    })
+    // 父组件在create时会异步的改变playIndex的值，触发该事件
+    watch(playIndex, () => {
+        let isSortList = store.state.audioControlState.isSortList;
+        // list组件的重新排序会改变playIndex的值，非重排才改变播放状态
+        if(!isSortList) {
+            // 改变audioSrc
+            setAudioSrc();
+        }
+        else {
+            store.commit('changeIsSortList', false);
+        }
+    })
+    // 点击上一首和下一首按钮会传入e，播放到最后会传入isAudioEnd = true，进度条拉到最后无传入
+    function changePlayIndex(e, isAudioEnd = false) {
+        if(isAudioEnd) {
+            //播放到结束位置时，paused为真，所以需要手动置假
+            store.commit('setAudioIsPaused', false);
+        }
+        else {
+            //暂停为真，播放为假
+            store.commit('setAudioIsPaused', myAudio.value.paused);
+        }
+        // 单曲
+        if(playMode.value === 1) {
+            // 直接用src给src赋值，重置状态
+            myAudio.value.setAttribute('src', audioSrc);
+            resetAudioPlayState();
+        }
+        // 循环
+        else if(playMode.value === 2) {
+            const audioList = store.state.playList;
+            let playIndex = store.state.audioControlState.playIndex.num;
+            let nowPlayIndex;
+            // 对应上一首按钮
+            if(e && ( (e.currentTarget && e.currentTarget.className.split(' ')[0] === 'previous-music-space') || e === 'preMusic') ) {
+                nowPlayIndex = playIndex > 0 ? playIndex - 1 : audioList.length - 1;
+            }
+            // 对应下一首、播放到最后、拖到最后
+            else {
+                nowPlayIndex = playIndex < audioList.length - 1 ? playIndex + 1 : 0;
+            }
+            // 触发监听，从而改变src及重置播放状态
+            store.commit('changePlayIndex', nowPlayIndex);
+        }
+        // 随机
+        // 另一套方案是通过生成一个无重复的随机播放列表，取代原播放列表
+        else if(playMode.value === 0) {
+            let index = createRandomIndex(e);
+            store.commit('changePlayIndex', index);
+        }
+    }
+    const createRandomIndex = function() {
+        let randomIndex = {
+            indexArr: [],
+            pointer: 0,
+        }
+        return (e) => {
+            const audioListLength = store.state.playList.length;
+            if(e && ( (e.currentTarget && e.currentTarget.className.split(' ')[0] === 'previous-music-space') || e === 'preMusic') ) {
+                // 上一首，如果此时指到indexArr的第一个，则随机生成一个index插入到indexArr的最前面
+                if(randomIndex.pointer === 0) {
+                    randomIndex.indexArr.unshift( parseInt(Math.random() * audioListLength) );
+                }
+                // 否则指向当前pointer的上一个index
+                else {
+                    randomIndex.pointer--;
+                }
+            }
+            else {
+                if(randomIndex.pointer >= randomIndex.indexArr.length - 1) {
+                    randomIndex.indexArr.push( parseInt(Math.random() * audioListLength) );
+                    randomIndex.pointer = randomIndex.indexArr.length - 1;
                 }
                 else {
-                    this.playModeStateObj.styleArr.map((value, index, arr) => {
-                        arr[index] = false;
-                    })
-                    this.playModeStateObj.styleArr[newValue] = true;
+                    randomIndex.pointer++;
                 }
-            },
-            immediate: true
-        },
-        '$store.state.audioControlState.playIndex': {
-            handler(newValue, oldValue) {
-                let list = this.$store.state.playList;
-                this.setAudioSrc(list, this.audioIsPaused);
             }
+            return randomIndex.indexArr[randomIndex.pointer]
         }
-    },
-    methods: {
-        toPlay() {
-            const audio = this.$refs.myAudio;
-            if(audio.paused) {
-                audio.play();
-                this.playButtonISShow = false;
-                this.nowPlayTimeInterval = setInterval(() => {
-                    this.nowPlaySecond++
-                }, 1000)
-            }
-            else {
-                audio.pause();
-                this.playButtonISShow = true;
-                clearInterval(this.nowPlayTimeInterval);
-            }
-            
-        },
-        changeCurrentTime(value, inDrag) {
-            const audio = this.$refs.myAudio;
-            if(!inDrag && value === 100) {
-                this.changePlayIndex();
-                this.canSetPrecent = true;
-            }
-            else if(!inDrag) {
-                this.canSetPrecent = true;
-                audio.currentTime = audio.duration * value / 100;
-                this.nowPlaySecond = parseInt(audio.duration * value / 100);
-            }
-            else {
-                this.nowPlaySecond = parseInt(audio.duration * value / 100);
-            }
-            
-        },
-        stopSetPrecent(e) {
-            this.canSetPrecent = false;
-        },
-        getAudioDurationTime(e) {
-            const audio = this.$refs.myAudio;
-            const audioSecond = parseInt(audio.duration % 60).toString().length < 2 ? `0${parseInt(audio.duration % 60)}` : parseInt(audio.duration % 60);
-            const audioMinute = parseInt(audio.duration / 60).toString().length < 2 ? `0${parseInt(audio.duration / 60)}` : parseInt(audio.duration / 60);
-            this.durationTime = audioMinute + ':' + audioSecond;
-        },
-        timeUpDate(e) {
-            if(e.target.currentTime === e.target.duration) {
-                this.changePlayIndex(e, true);
-                return
-            }
-            if(this.canSetPrecent) {
-                let nowPrecent = e.target.currentTime / e.target.duration * 100;
-                this.nowPrecent = nowPrecent;
-            }
-
-        },
-        audioEnd(e) {
-            e.preventDefault();
-        },
-        changeVolume(value) {
-            const audio = this.$refs.myAudio;
-            audio.volume = parseInt(value) / 100;
-            
-        },
-        changeVolumeShow() {
-            this.volumeBarIsShow = !this.volumeBarIsShow;
-        },
-        changePlayMode() {
-            if(this.playMode < this.playModeStateObj.styleArr.length - 1) {
-                this.playMode++;
-            }
-            else{
-                this.playMode = 0;
-            }
-        },
-        changePlayIndex(e, isTimeEnd = false) {
-            const audio = this.$refs.myAudio;
-            if(isTimeEnd) {
-                //播放到结束位置时，paused为真，所以需要手动置假
-
-                this.$store.commit('setAudioIsPaused', false);
-            }
-            else {
-                //暂停为真，播放为假
-                this.$store.commit('setAudioIsPaused', audio.paused);
-            }
-            if(this.playMode === 1) {
-                audio.setAttribute('src', this.audioSrc);
-                this.resetAudioPlayState(this.audioIsPaused);
-            }
-            else if(this.playMode !== 1) {
-                const audioList = this.$store.state.playList;
-                let playIndex = this.$store.state.audioControlState.playIndex;
-                let nowPlayIndex;
-                if(e && e.currentTarget.className.split(' ')[0] === 'previous-music-space') {
-                    nowPlayIndex = playIndex > 0 ? playIndex - 1 : audioList.length - 1;
+    }();
+    let audioName = ref('');
+    function setAudioSrc() {
+        let playIndex = store.state.audioControlState.playIndex.num;
+        let audioList = store.state.playList;
+        audioName.value = audioList[playIndex].musicName.join("");
+        if(window.getAudio) {
+            window.getAudio(audioName.value)
+            .then((res) => {
+                if(audioSrc) {
+                    URL.revokeObjectURL(audioSrc);
                 }
-                else {
-                    nowPlayIndex = playIndex < audioList.length - 1 ? playIndex + 1 : 0;
-                }
-                this.$store.commit('changePlayIndex', nowPlayIndex);
-            }
-            
-        },
-        setAudioSrc(audioList, audioIsPaused) {
-            const audio = this.$refs.myAudio;
-            let playIndex = this.$store.state.audioControlState.playIndex;
-            if(window.getAudio) {
-                window.getAudio(audioList[playIndex].musicName.join(""))
-                .then((res) => {
-                    if(this.audioSrc) {
-                        URL.revokeObjectURL(this.audioSrc);
+                audioSrc = res;
+                myAudio.value.setAttribute('src', res);
+                resetAudioPlayState();
+            })
+            .catch((err) => {
+                console.log(err);
+            })
+        }
+        else {
+            //axios get src
+        }
+    }
+    // 重置播放状态
+    function resetAudioPlayState() {
+        // 获得重置前的播放状态
+        const audioIsPaused = store.state.audioControlState.audioIsPaused;
+        nowPlaySecond.value = 0;
+        nowPrecent.value = 0;
+        clearInterval(nowPlayTimeInterval);
+        if(audioIsPaused) {
+            playButtonISShow.value = true;
+        }
+        else {
+            nowPlayTimeInterval = setInterval(() => {
+                nowPlaySecond.value++
+            }, 1000);
+            playButtonISShow.value = false;
+            myAudio.value.play();
+        }
+    }
+
+    // 控制播放快捷键
+    const nowVolume = ref(50);
+    function addOrSubVolume(arg) {
+        if(arg === '+') {
+            myAudio.value.volume = myAudio.value.volume + 0.1 < 1 ? myAudio.value.volume + 0.1 : 1;
+            nowVolume.value = myAudio.value.volume * 100;
+        }
+        else if(arg === '-') {
+            myAudio.value.volume = myAudio.value.volume - 0.1 > 0 ? myAudio.value.volume - 0.1 : 0;
+            nowVolume.value = myAudio.value.volume * 100;
+        }
+    }
+    onMounted(() => {
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    addOrSubVolume('+');
+                    break;
+                case 'ArrowDown':
+                    addOrSubVolume('-');
+                    break;
+                case 'ArrowLeft':
+                    changePlayIndex('preMusic');
+                    break;
+                case 'ArrowRight':
+                    changePlayIndex();
+                    break;
+                case ' ':
+                    toPlay();
+                    break;
+                case 'c':
+                    if(e.altKey) {
+                        changePlayMode()
                     }
-                    this.audioSrc = res;
-                    audio.setAttribute('src', res);
-                    this.resetAudioPlayState(audioIsPaused);
-                })
-                .catch((err) => {
-                    
-                })
+                default:
+                    break;
             }
-            else {
-                //axios get src
-            }
-        },
-        resetAudioPlayState(audioIsPaused) {
-            const audio = this.$refs.myAudio;
+        })
+    })
 
-            this.nowPlaySecond = 0;
-            this.nowPrecent = 0;
-            clearInterval(this.nowPlayTimeInterval);
-            if(audioIsPaused) {
-                this.playButtonISShow = true;
+    // 全局快捷键
+    onMounted(() => {
+        if(window.changeMusic) {
+            const componentData = {
+                addOrSubVolume,
+                changePlayIndex,
+                changePlayMode,
+                toPlay,
             }
-            else {
-                this.nowPlayTimeInterval = setInterval(() => {
-                    this.nowPlaySecond++
-                }, 1000);
-                this.playButtonISShow = false;
-                audio.play();
-            }
-
+            window.changeMusic(componentData);
         }
-    },
-}
+    })
+
+    let isMinsize = computed(() => {
+        return store.state.isMinsize
+    })
+
+    // 窗口大小控制
+    let showSizeBtn = ref(false);
+    function showOrHiddenSizeBtn() {
+        showSizeBtn.value = !showSizeBtn.value;
+    }
+    function closeSizeBtn() {
+        showSizeBtn.value = false;
+    }
 </script>
 
 <style lang="less">
@@ -322,17 +448,57 @@ export default {
     }
     .audio-button-space {
         width: 500px;
-        height: 30px;
+        height: 40px;
         display: flex;
         justify-content: center;
         align-items: center;
-        svg {
+        position: relative;
+        .size-space {
+            height: 40px;
+            position: absolute;
+            left: 10px;
+            display: flex;
+            align-items: center;
+            & > .more-btn:hover {
+                background-color: #66ccff74;
+            }
+            .more-btn {
+                width: 30px;
+                height: 30px;
+                svg {
+                    width: 100%;
+                    fill: @mikuColor;
+                }
+            }
+            .size-btn {
+                // border-left: 1px solid;
+                // border-image: linear-gradient(white, @mikuColor, white) 1;
+                height: 30px;
+                overflow: hidden;
+                position: relative;
+                .hidden-enter-active,
+                .hidden-leave-active {
+                    transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
+                }
+                .hidden-leave-from,
+                .hidden-enter-to {
+                    opacity: 1;
+                    transform: translateX(0%);
+                }
+                .hidden-leave-to,
+                .hidden-enter-from {
+                    opacity: 0;
+                    transform: translateX(-100%);
+                }
+            }
+        }
+        & > div > svg {
             position: absolute;
             fill: fadeout(@mikuColor, 50%);
             width: 100%;
             transition: opacity 0.15s ease-in-out, transform 0.15s ease-in-out;
         }
-        svg:hover {
+        & > div > svg:hover {
             fill: @mikuColor;
         }
         & > .play-button-space {
@@ -373,13 +539,12 @@ export default {
                 display: flex;
                 align-items: center;
                 position: absolute;
-                top: -5px;
-                left: 0;
-                transform-origin: left top;
-                transform: rotate(-90deg);
+                top: 2px;
+                left: 30px;
+                // transform-origin: left top;
+                // transform: rotate(-90deg);
                 border-radius: 4px;
-                box-shadow: -1px 0px 2px 1px rgba(57, 197, 187, 0.502);
-                background: fadeout(@mikuColor, 50);
+                background: fadeout(@mikuColor, 80);
                 // > .volume-number {
                 //     font-size: 10px;
                 //     line-height: 10px;
@@ -422,5 +587,14 @@ export default {
             font-size: 12px;
             margin: 0 8px;
         }
+    }
+    .audio-name-space {
+        -webkit-app-region: drag;
+        width: 500px;
+        padding: 10px 0px;
+        border-top: 1px solid;
+        border-image: linear-gradient(90deg, white, rgb(225, 225, 225), white) 1;
+        display: flex;
+        justify-content: center;
     }
 </style>

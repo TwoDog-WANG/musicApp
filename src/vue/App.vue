@@ -4,7 +4,6 @@
 
 <script>
 import MyAudioComponent from './component/myAudioComponent/MyAudioComponent.vue';
-import src from 'C:/Users/王二狗/Desktop/web/konomusic/src/electron/111.mp3'
 export default {
     components: {
         MyAudioComponent,
@@ -19,7 +18,13 @@ export default {
 </script>
 
 <style>
-    #app {
-        margin-top: 200px;
+    body {
+        margin: 0px;
     }
+    /* body {
+        -webkit-app-region: drag;
+    }
+    .click {
+        -webkit-app-region: no-drag;
+    } */
 </style>

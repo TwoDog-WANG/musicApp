@@ -12,4 +12,4 @@ async function getAudio(endPath = '3nd - Nemure.mp3') {
     return URL.createObjectURL(new Blob([audioArrayBuffer]));
 }
 
-module.exports = getAudio;
+module.exports = {getAudio};

@@ -3,16 +3,21 @@ const path = require('path');
 
 function createWindow () {
     const win = new BrowserWindow({
-      width: 800,
-      height: 600,
+      width: 502,
+      // height: 440,
+      height: 80,
+      frame: false,
+      resizable: false,
+      alwaysOnTop: true,
       webPreferences: {
         preload: path.join(__dirname, './preload/preload.js'),
-        webSecurity: false
-      }
+      },
     })
-    //win.loadFile('./src/vue_dist/main.html')
+    win.setSkipTaskbar(true);
+    // win.webContents.openDevTools()
+    // win.loadFile('./src/vue_dist/main.html')
     win.loadURL('http://localhost:8080/main.html');
-    win.webContents.openDevTools();
+    return win
 }
 
 module.exports = createWindow;
